@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IVPMS | Industry Visit Participant Management System</title>
+  <meta name="description" content="Next-generation participant tracking, intelligent ranking, and automated communications management system for IEEE Student Branch of SLIIT industry visits.">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- SheetJS for local Excel parsing and export -->
+  <script src="xlsx.full.min.js"></script>
+  <!-- Preloaded Historical State -->
+  <script src="initial_data.js"></script>
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Background Glow Accents -->
+  <div class="bg-glow-container" aria-hidden="true">
+    <div class="glow-orb orb-1"></div>
+    <div class="glow-orb orb-2"></div>
+    <div class="glow-orb orb-3"></div>
+  </div>
+
+  <div id="app" class="app-layout">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand-badge">
+          <span class="pulse-dot"></span>
+          <span>IEEE SLIIT</span>
+        </div>
+        <div class="title-group">
+          <h1 class="app-title">IVPMS <span class="title-sub">v2.0</span></h1>
+          <p class="app-tagline">Industry Visit Participant Management System</p>
+        </div>
+      </div>
+
+      <!-- Quick KPI Counters -->
+      <div class="kpi-ribbon">
+        <div class="kpi-pill">
+          <span class="kpi-label">Main Roster</span>
+          <span id="kpi-members-count" class="kpi-val">250</span>
+        </div>
+        <div class="kpi-pill">
+          <span class="kpi-label">Visits Tracked</span>
+          <span id="kpi-visits-count" class="kpi-val">8</span>
+        </div>
+        <div class="kpi-pill">
+          <span class="kpi-label">Blacklisted</span>
+          <span id="kpi-blacklisted-count" class="kpi-val danger">0</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-export-all-members" class="btn btn-secondary btn-sm" title="Download Master Database as Excel">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Export Excel
+        </button>
+        <button id="btn-register-visit-modal" class="btn btn-primary btn-sm">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14" stroke-width="2" stroke-linecap="round"/></svg>
+          Register Visit
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Bar -->
+    <nav class="app-nav">
+      <div class="nav-tabs">
+        <button class="nav-tab active" data-tab="tab-roster">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Main Database</span>
+          <span id="badge-total-members" class="tab-badge">250</span>
+        </button>
+
+        <button class="nav-tab" data-tab="tab-selection">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span>Visit & Selection Engine</span>
+          <span id="badge-active-visit-state" class="tab-badge highlight">Active</span>
+        </button>
+
+        <button class="nav-tab" data-tab="tab-rsvp">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span>RSVP & Attendance</span>
+        </button>
+
+        <button class="nav-tab" data-tab="tab-comms">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Comms Generator</span>
+        </button>
+
+        <button class="nav-tab" data-tab="tab-visits-history">
+          <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Visits History</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="app-main">
+      
+      <!-- ================= TAB 1: MAIN ROSTER ================= -->
+      <section id="tab-roster" class="tab-pane active">
+        <!-- Controls Bar -->
+        <div class="panel-header glass-card">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="roster-search" placeholder="Search by Name, NIC, IEEE Number, WhatsApp, or Email..." autocomplete="off">
+            <button id="roster-search-clear" class="btn-clear hidden">&times;</button>
+          </div>
+
+          <div class="filter-group">
+            <select id="filter-company-visit" class="select-dropdown">
+              <option value="ALL">All Visits</option>
+              <option value="Atlas Labs">Atlas Labs (24)</option>
+              <option value="WSO2">WSO2 (50)</option>
+              <option value="Codegen">Codegen (60)</option>
+              <option value="Orange">Orange (20)</option>
+              <option value="Rootcode">Rootcode (26)</option>
+              <option value="IFS">IFS (62)</option>
+              <option value="Zone24x7">Zone24x7 (48)</option>
+              <option value="Cambio">Cambio (27)</option>
+            </select>
+
+            <select id="filter-membership" class="select-dropdown">
+              <option value="ALL">All Memberships</option>
+              <option value="MEMBERS">IEEE Members Only</option>
+              <option value="NON_MEMBERS">Non-Members Only</option>
+            </select>
+
+            <select id="filter-visit-count" class="select-dropdown">
+              <option value="ALL">All Visit Counts</option>
+              <option value="0">0 Visits</option>
+              <option value="1">1 Visit</option>
+              <option value="2">2 Visits</option>
+              <option value="3+">3+ Visits</option>
+            </select>
+
+            <button id="btn-add-member-modal" class="btn btn-secondary">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+              Add Member
+            </button>
+          </div>
+        </div>
+
+        <!-- Master Table View -->
+        <div class="table-container glass-card">
+          <div class="table-meta">
+            <span id="roster-results-count">Showing 250 members</span>
+            <span class="table-hint">Click any row to view full visit history or toggle blacklist status</span>
+          </div>
+          <table class="data-table" id="table-main-roster">
+            <thead>
+              <tr>
+                <th style="width: 50px;">#</th>
+                <th>Full Name</th>
+                <th>NIC Number</th>
+                <th>IEEE Membership #</th>
+                <th>WhatsApp</th>
+                <th>Email Address</th>
+                <th style="text-align: center;">Visits</th>
+                <th>Attended Visits Log</th>
+                <th style="width: 110px; text-align: center;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="roster-tbody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: VISIT & SELECTION ENGINE ================= -->
+      <section id="tab-selection" class="tab-pane">
+        <!-- Active Visit Selector / Banner -->
+        <div class="visit-banner glass-card">
+          <div class="visit-banner-info">
+            <div class="visit-badge-pill" id="current-visit-status">ACTIVE SHORTLISTING</div>
+            <h2 id="current-visit-company" class="visit-company-title">Zone24x7 Industry Visit</h2>
+            <div class="visit-metadata-row">
+              <span class="meta-item"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg> <span id="current-visit-date">2026-09-25</span></span>
+              <span class="meta-item"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> Organised by: <strong id="current-visit-org">IEEE Student Branch & RAS</strong></span>
+              <span class="meta-item"><svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Capacity: <strong id="current-visit-capacity">23</strong></span>
+            </div>
+          </div>
+
+          <div class="visit-banner-actions">
+            <div class="capacity-meter-box">
+              <div class="capacity-meter-header">
+                <span>Slots Filled</span>
+                <span id="capacity-meter-text"><strong id="selected-count">0</strong> / <span id="target-capacity">23</span></span>
+              </div>
+              <div class="meter-bar-track">
+                <div id="capacity-meter-fill" class="meter-bar-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <button id="btn-auto-select-top" class="btn btn-emerald">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              Auto-Select Top 23
+            </button>
+            <button id="btn-export-shortlist" class="btn btn-secondary">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              Export List
+            </button>
+          </div>
+        </div>
+
+        <!-- Ingestion / Upload Dropzone Card -->
+        <div class="ingestion-grid">
+          <div class="dropzone-card glass-card" id="dropzone">
+            <input type="file" id="form-upload-input" accept=".xlsx,.xls,.csv" class="file-input-hidden">
+            <div class="dropzone-body" id="dropzone-trigger">
+              <div class="dropzone-icon-ring">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+              </div>
+              <h3 class="dropzone-title">Upload Google Form Responses</h3>
+              <p class="dropzone-subtitle">Drag and drop your <strong>.xlsx</strong> or <strong>.csv</strong> registration export here</p>
+              <div class="dropzone-actions">
+                <button type="button" class="btn btn-outline btn-sm">Browse Local Files</button>
+                <button type="button" id="btn-load-demo-responses" class="btn btn-ghost btn-sm" title="Loads the real 115 applicant responses from Zone24x7">
+                  ⚡ Load Zone24x7 115 Applicants (Demo)
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Algorithm Explanation Card -->
+          <div class="algorithm-card glass-card">
+            <h3 class="algo-title">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              Ranking Algorithm Hierarchy
+            </h3>
+            <ol class="algo-steps">
+              <li>
+                <strong>Priority 1: IEEE / RAS Membership</strong>
+                <span>Active IEEE members verified via Main database or valid membership number are prioritized over non-members.</span>
+              </li>
+              <li>
+                <strong>Priority 2: Fewest Total Prior Visits</strong>
+                <span>Sorted ascending by live attendance count. Members with 0 visits receive top priority, followed by 1 visit, then 2.</span>
+              </li>
+              <li>
+                <strong>Priority 3: Timestamp Tiebreaker</strong>
+                <span>Ties between applicants with the same visit count are broken by submission order (earliest application first).</span>
+              </li>
+              <li>
+                <strong>Safety Guard: Blacklist Badge</strong>
+                <span>Prior disengagement or no-shows flag candidate with a visible review badge without silent drops.</span>
+              </li>
+            </ol>
+          </div>
+        </div>
+
+        <!-- Candidate Pool Tabs (Selected / Reserve / Below Cut) -->
+        <div class="selection-view-container glass-card">
+          <div class="selection-tabs-header">
+            <div class="sub-tabs">
+              <button class="sub-tab active" data-subtab="subtab-selected">
+                Selected Roster (<span id="count-badge-selected">0</span>)
+              </button>
+              <button class="sub-tab" data-subtab="subtab-reserve">
+                Reserve Pool (<span id="count-badge-reserve">0</span>)
+              </button>
+              <button class="sub-tab" data-subtab="subtab-all-ranked">
+                Full Ranked List (<span id="count-badge-all">0</span>)
+              </button>
+              <button class="sub-tab" data-subtab="subtab-unmatched">
+                Review Needed (<span id="count-badge-unmatched">0</span>)
+              </button>
+            </div>
+
+            <div class="selection-quick-filters">
+              <input type="text" id="candidate-search" placeholder="Filter candidates by name / NIC..." class="input-sm">
+            </div>
+          </div>
+
+          <!-- Subtab 1: Selected Candidates -->
+          <div id="subtab-selected" class="subtab-pane active">
+            <div class="subtab-summary-bar">
+              <span><strong>Selected Confirmed List</strong> — Ready for WhatsApp confirmation outreach</span>
+              <button id="btn-proceed-to-rsvp" class="btn btn-primary btn-sm">Move to RSVP Workflow &rarr;</button>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">Select</th>
+                  <th style="width: 50px;">Rank</th>
+                  <th>Applicant Name</th>
+                  <th>NIC</th>
+                  <th>IEEE Status</th>
+                  <th>Academic Year / Degree</th>
+                  <th style="text-align: center;">Prior Visits</th>
+                  <th>Dietary</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-selected">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Subtab 2: Reserve Candidates -->
+          <div id="subtab-reserve" class="subtab-pane">
+            <div class="subtab-summary-bar">
+              <span><strong>Call-Up Reserve Order</strong> — Automatically promoted when a selected applicant declines</span>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">Select</th>
+                  <th style="width: 50px;">Order</th>
+                  <th>Applicant Name</th>
+                  <th>NIC</th>
+                  <th>IEEE Status</th>
+                  <th>Academic Year / Degree</th>
+                  <th style="text-align: center;">Prior Visits</th>
+                  <th>Dietary</th>
+                  <th>Promote Action</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-reserve">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Subtab 3: Full Ranked List -->
+          <div id="subtab-all-ranked" class="subtab-pane">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 40px;">Select</th>
+                  <th style="width: 50px;">#</th>
+                  <th>Applicant Name</th>
+                  <th>NIC</th>
+                  <th>IEEE Status</th>
+                  <th>Academic Year / Degree</th>
+                  <th style="text-align: center;">Prior Visits</th>
+                  <th>Dietary</th>
+                  <th>Selection Tier</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-all-ranked">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Subtab 4: Unmatched Review -->
+          <div id="subtab-unmatched" class="subtab-pane">
+            <div class="subtab-summary-bar warning">
+              <span>⚠️ Applicants who claimed IEEE membership but whose NIC or Membership # didn't match cleanly</span>
+            </div>
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Applicant Name</th>
+                  <th>NIC Entered</th>
+                  <th>Claimed Membership #</th>
+                  <th>WhatsApp</th>
+                  <th>Email</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="tbody-unmatched">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: RSVP & ATTENDANCE ================= -->
+      <section id="tab-rsvp" class="tab-pane">
+        <div class="glass-card rsvp-manager-panel">
+          <div class="panel-header-simple">
+            <div>
+              <h2 class="section-title">RSVP Tracking & Post-Visit Attendance</h2>
+              <p class="section-desc">Manage candidate responses, trigger 1-click reserve auto-promotion, and commit final attendance to the Main database.</p>
+            </div>
+            <div class="rsvp-action-btns">
+              <button id="btn-commit-attendance" class="btn btn-emerald">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Commit & Lock Attendance to Main
+              </button>
+            </div>
+          </div>
+
+          <!-- RSVP Stats -->
+          <div class="rsvp-stat-cards">
+            <div class="stat-card">
+              <span class="stat-number emerald" id="rsvp-confirmed-count">0</span>
+              <span class="stat-title">RSVP Confirmed</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number amber" id="rsvp-pending-count">0</span>
+              <span class="stat-title">Pending Confirmation</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number danger" id="rsvp-declined-count">0</span>
+              <span class="stat-title">Declined / Replaced</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-number indigo" id="rsvp-attended-count">0</span>
+              <span class="stat-title">Attended (Post-Visit)</span>
+            </div>
+          </div>
+
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;">#</th>
+                <th>Candidate Name</th>
+                <th>WhatsApp</th>
+                <th>Email</th>
+                <th>RSVP Status</th>
+                <th style="text-align: center;">Mark Attended</th>
+                <th>Reserve Promotion Action</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-rsvp">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: COMMS GENERATOR ================= -->
+      <section id="tab-comms" class="tab-pane">
+        <div class="comms-layout-grid">
+          <!-- Comms Config Panel -->
+          <div class="glass-card comms-config-card">
+            <h3 class="card-heading">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Message Parameter Setup
+            </h3>
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Industry Visit Date</label>
+                <input type="date" id="comms-date" value="2026-09-25">
+              </div>
+              <div class="form-field">
+                <label>Reporting Time</label>
+                <input type="text" id="comms-time" value="08:30 AM" placeholder="e.g. 08:30 AM">
+              </div>
+              <div class="form-field">
+                <label>Reporting Point</label>
+                <input type="text" id="comms-location" value="SLIIT Main Entrance / Gate 01" placeholder="e.g. SLIIT Main Gate">
+              </div>
+              <div class="form-field">
+                <label>Confirmation Deadline</label>
+                <input type="text" id="comms-deadline" value="Tomorrow at 06:00 PM" placeholder="e.g. Wednesday 6 PM">
+              </div>
+              <div class="form-field full-width">
+                <label>Official WhatsApp Group Link</label>
+                <input type="text" id="comms-grouplink" value="https://chat.whatsapp.com/IEEE-Zone24x7-Visit" placeholder="https://chat.whatsapp.com/...">
+              </div>
+            </div>
+
+            <!-- Dietary Summary Pill -->
+            <div class="catering-headcount-box">
+              <h4>Dietary & Catering Headcount</h4>
+              <div class="dietary-counters">
+                <div class="dietary-pill">
+                  <span>Vegetarian</span>
+                  <strong id="comms-veg-count">0</strong>
+                </div>
+                <div class="dietary-pill">
+                  <span>Non-Vegetarian</span>
+                  <strong id="comms-nonveg-count">0</strong>
+                </div>
+              </div>
+              <p class="headcount-note">Send this headcount directly to the company host for catering arrangements.</p>
+            </div>
+
+            <!-- Bulk Copy Phone Numbers -->
+            <div class="bulk-phone-box">
+              <label>WhatsApp Group Bulk Number Paste (Normalized)</label>
+              <textarea id="comms-bulk-phones" readonly rows="3" placeholder="Click 'Copy All Numbers' below to copy all confirmed candidate WhatsApp numbers"></textarea>
+              <button id="btn-copy-bulk-phones" class="btn btn-secondary btn-sm full-width">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy All WhatsApp Numbers
+              </button>
+            </div>
+          </div>
+
+          <!-- Comms Preview & Dispatcher -->
+          <div class="glass-card comms-preview-card">
+            <div class="preview-header">
+              <div class="preview-tabs">
+                <button class="preview-tab active" data-format="whatsapp">WhatsApp Format (Quick)</button>
+                <button class="preview-tab" data-format="email">Email Format (Formal)</button>
+              </div>
+              <div class="candidate-selector-box">
+                <label>Preview For:</label>
+                <select id="comms-candidate-select" class="select-dropdown">
+                  <!-- Rendered by JS -->
+                </select>
+              </div>
+            </div>
+
+            <div class="preview-body">
+              <div id="preview-text-box" class="message-preview-content">
+                <!-- Live updated preview -->
+              </div>
+            </div>
+
+            <div class="preview-actions">
+              <button id="btn-copy-message" class="btn btn-secondary">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy Message Text
+              </button>
+              <a id="btn-send-whatsapp-web" href="#" target="_blank" class="btn btn-emerald">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                Open in WhatsApp Web
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 5: VISITS HISTORY ================= -->
+      <section id="tab-visits-history" class="tab-pane">
+        <div class="glass-card history-panel">
+          <div class="panel-header-simple">
+            <div>
+              <h2 class="section-title">Industry Visits Archive & Distribution</h2>
+              <p class="section-desc">Historical record of all 8 industry visits completed by IEEE Student Branch of SLIIT.</p>
+            </div>
+          </div>
+
+          <div class="visits-card-grid" id="visits-archive-grid">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ================= MODALS ================= -->
+  
+  <!-- Register New Visit Modal -->
+  <div id="modal-register-visit" class="modal-backdrop hidden">
+    <div class="modal-box glass-card">
+      <div class="modal-header">
+        <h3>Register New Industry Visit</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="form-register-visit">
+        <div class="form-field">
+          <label>Company Name <span class="required">*</span></label>
+          <input type="text" id="new-visit-company" required placeholder="e.g. Sysco LABS, Virtusa, 99x">
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label>Visit Date <span class="required">*</span></label>
+            <input type="date" id="new-visit-date" required>
+          </div>
+          <div class="form-field">
+            <label>Target Capacity <span class="required">*</span></label>
+            <input type="number" id="new-visit-capacity" required min="1" max="150" value="25">
+          </div>
+        </div>
+        <div class="form-field">
+          <label>Organised By <span class="required">*</span></label>
+          <input type="text" id="new-visit-org" required value="IEEE Student Branch of SLIIT">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create & Begin Selection</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Member Modal -->
+  <div id="modal-add-member" class="modal-backdrop hidden">
+    <div class="modal-box glass-card">
+      <div class="modal-header">
+        <h3>Add Member to Main Database</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <form id="form-add-member">
+        <div class="form-field">
+          <label>Full Name <span class="required">*</span></label>
+          <input type="text" id="new-member-name" required placeholder="e.g. Nirmal Perera">
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label>NIC Number <span class="required">*</span></label>
+            <input type="text" id="new-member-nic" required placeholder="e.g. 200312345678 or 981234567V">
+          </div>
+          <div class="form-field">
+            <label>IEEE Membership # (Optional)</label>
+            <input type="text" id="new-member-ieee" placeholder="e.g. 102568985">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field">
+            <label>WhatsApp Number <span class="required">*</span></label>
+            <input type="text" id="new-member-phone" required placeholder="e.g. 0771234567">
+          </div>
+          <div class="form-field">
+            <label>Email Address <span class="required">*</span></label>
+            <input type="email" id="new-member-email" required placeholder="e.g. student@my.sliit.lk">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save to Main</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Blacklist Modal -->
+  <div id="modal-blacklist" class="modal-backdrop hidden">
+    <div class="modal-box glass-card">
+      <div class="modal-header">
+        <h3>Flag / Blacklist Candidate</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Candidate: <strong id="blacklist-candidate-name"></strong> (<span id="blacklist-candidate-nic"></span>)</p>
+        <div class="form-field" style="margin-top: 1rem;">
+          <label>Reason for Flagging / Blacklist</label>
+          <textarea id="blacklist-reason-input" rows="3" placeholder="e.g. No-show without notice at IFS visit; Disengaged during Codegen session..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btn-remove-blacklist" class="btn btn-ghost danger">Clear Blacklist</button>
+        <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+        <button type="button" id="btn-save-blacklist" class="btn btn-danger">Apply Flag</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

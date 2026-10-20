@@ -1,0 +1,5 @@
+.DS_Store
+*.backup.xlsx
+*_backup.xlsx
+.gemini/
+scratch/
