@@ -11,6 +11,10 @@
   const STORAGE_KEY_VISITS = 'ivpms_visits_v2';
   const STORAGE_KEY_ACTIVE_VISIT = 'ivpms_active_visit_v2';
   const STORAGE_KEY_APPLICANTS = 'ivpms_applicants_v2';
+  const STORAGE_KEY_VISIT_ROSTERS = 'ivpms_visit_rosters_v2';
+  const STORAGE_KEY_RSVP = 'ivpms_rsvp_v2';
+  const STORAGE_KEY_ATTENDED = 'ivpms_attended_v2';
+  const STORAGE_KEY_SELECTED = 'ivpms_selected_v2';
 
   // Load from local storage or initial seed
   function getInitialMembers() {
@@ -35,23 +39,75 @@
     return [];
   }
 
-  let state = {
-    members: getInitialMembers(),
-    visits: getInitialVisits(),
-    activeVisit: {
+  function getInitialRosters() {
+    const saved = localStorage.getItem(STORAGE_KEY_VISIT_ROSTERS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return {};
+  }
+
+  function getInitialApplicants() {
+    const saved = localStorage.getItem(STORAGE_KEY_APPLICANTS);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return [];
+  }
+
+  function getInitialRsvpStatuses() {
+    const saved = localStorage.getItem(STORAGE_KEY_RSVP);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return {};
+  }
+
+  function getInitialAttendedNics() {
+    const saved = localStorage.getItem(STORAGE_KEY_ATTENDED);
+    if (saved) {
+      try { return new Set(JSON.parse(saved)); } catch (e) { console.error(e); }
+    }
+    return new Set();
+  }
+
+  function getInitialSelectedNics() {
+    const saved = localStorage.getItem(STORAGE_KEY_SELECTED);
+    if (saved) {
+      try { return new Set(JSON.parse(saved)); } catch (e) { console.error(e); }
+    }
+    return new Set();
+  }
+
+  function getInitialActiveVisit() {
+    const saved = localStorage.getItem(STORAGE_KEY_ACTIVE_VISIT);
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return {
       id: 'VIS-007',
       company: 'Zone24x7',
       date: '2026-09-25',
       capacity: 23,
       organisedBy: 'IEEE Student Branch & RAS',
       status: 'Shortlisting'
-    },
-    applicants: [], // Raw & enriched applicants
-    selectedNics: new Set(),
-    rsvpStatuses: {}, // nic -> 'Confirmed' | 'Pending' | 'Declined'
-    attendedNics: new Set(),
+    };
+  }
+
+  let state = {
+    members: getInitialMembers(),
+    visits: getInitialVisits(),
+    visitRosters: getInitialRosters(), // temporary visit database
+    activeVisit: getInitialActiveVisit(),
+    applicants: getInitialApplicants(), // Raw & enriched applicants
+    selectedNics: getInitialSelectedNics(),
+    rsvpStatuses: getInitialRsvpStatuses(), // nic -> 'Confirmed' | 'Pending' | 'Declined'
+    attendedNics: getInitialAttendedNics(),
     commsFormat: 'whatsapp', // 'whatsapp' | 'email'
-    currentBlacklistCandidate: null
+    currentBlacklistCandidate: null,
+    modalActiveVisitId: null,
+    modalFilterStatus: 'ALL',
+    modalSearchQuery: ''
   };
 
   // Save State
@@ -61,6 +117,10 @@
       localStorage.setItem(STORAGE_KEY_VISITS, JSON.stringify(state.visits));
       localStorage.setItem(STORAGE_KEY_ACTIVE_VISIT, JSON.stringify(state.activeVisit));
       localStorage.setItem(STORAGE_KEY_APPLICANTS, JSON.stringify(state.applicants));
+      localStorage.setItem(STORAGE_KEY_VISIT_ROSTERS, JSON.stringify(state.visitRosters));
+      localStorage.setItem(STORAGE_KEY_RSVP, JSON.stringify(state.rsvpStatuses));
+      localStorage.setItem(STORAGE_KEY_ATTENDED, JSON.stringify(Array.from(state.attendedNics)));
+      localStorage.setItem(STORAGE_KEY_SELECTED, JSON.stringify(Array.from(state.selectedNics)));
     } catch (e) {
       console.warn('LocalStorage save error:', e);
     }
@@ -348,9 +408,10 @@
     e.target.reset();
   });
 
-  // --- 6. REGISTER VISIT MODAL ---
-  document.getElementById('btn-register-visit-modal')?.addEventListener('click', () => {
-    document.getElementById('modal-register-visit')?.classList.remove('hidden');
+  document.querySelectorAll('#btn-register-visit-modal, #btn-history-register-visit').forEach(btn => {
+    btn?.addEventListener('click', () => {
+      document.getElementById('modal-register-visit')?.classList.remove('hidden');
+    });
   });
 
   document.getElementById('form-register-visit')?.addEventListener('submit', (e) => {
@@ -360,14 +421,17 @@
     const capacity = parseInt(document.getElementById('new-visit-capacity').value, 10) || 25;
     const org = document.getElementById('new-visit-org').value.trim();
 
-    state.activeVisit = {
-      id: `VIS-${state.visits.length + 1}`,
+    const newVisit = {
+      id: `VIS-${String(state.visits.length + 1).padStart(3, '0')}`,
       company,
       date,
       capacity,
       organisedBy: org,
       status: 'Shortlisting'
     };
+
+    state.visits.push(newVisit);
+    state.activeVisit = newVisit;
 
     // Reset current selection
     state.applicants = [];
@@ -383,6 +447,7 @@
     if (selTab) selTab.click();
 
     showToast(`Registered new visit: ${company}`);
+    renderVisitsHistory();
     e.target.reset();
   });
 
@@ -1056,9 +1121,22 @@
     });
 
     state.activeVisit.status = 'Completed';
+    const visitRecord = state.visits.find(v => v.id === state.activeVisit.id || v.company.toLowerCase() === company.toLowerCase());
+    if (visitRecord) {
+      visitRecord.status = 'Completed';
+      visitRecord.attendeeCount = state.attendedNics.size;
+    }
+    if (state.visitRosters[state.activeVisit.id]) {
+      state.visitRosters[state.activeVisit.id].status = 'Completed';
+      state.visitRosters[state.activeVisit.id].participants.forEach(p => {
+        p.attended = state.attendedNics.has(p.nic);
+      });
+    }
+
     saveState();
     renderRsvpManager();
     renderMasterRoster();
+    renderVisitsHistory();
     showToast(`✓ Attendance locked! Updated ${updatedCount} members, enrolled ${newEnrolled} new members into Main.`);
   });
 
@@ -1193,32 +1271,740 @@ chathumina@ieee.org`;
     });
   });
 
-  // --- 11. VISITS ARCHIVE (TAB 5) ---
+  // --- 11. TEMPORARY VISIT DATABASE & ROSTER ENGINE ---
+  function saveCurrentRosterToVisitDb() {
+    const selected = state.applicants.filter(a => state.selectedNics.has(a.nic));
+    if (selected.length === 0) {
+      showToast('No candidates selected to save. Please select candidates first.', 'error');
+      return;
+    }
+
+    const visitId = state.activeVisit.id || `VIS-${String(state.visits.length + 1).padStart(3, '0')}`;
+    const participants = selected.map((app, idx) => ({
+      id: app.id || `PART-${idx + 1}`,
+      name: app.name,
+      nic: app.nic,
+      ieeeNumber: app.ieeeNumber || '',
+      isMember: app.isMember || false,
+      phone: app.phone || '',
+      email: app.email || '',
+      degree: app.degree || '',
+      year: app.year || '',
+      dietary: app.dietary || 'Non-Veg',
+      rsvpStatus: state.rsvpStatuses[app.nic] || 'Pending',
+      attended: state.attendedNics.has(app.nic),
+      notes: app.confirmationNote || ''
+    }));
+
+    // Ensure activeVisit is recorded in state.visits
+    let visitRecord = state.visits.find(v => v.id === visitId || v.company.toLowerCase() === state.activeVisit.company.toLowerCase());
+    if (!visitRecord) {
+      visitRecord = {
+        id: visitId,
+        company: state.activeVisit.company,
+        date: state.activeVisit.date,
+        capacity: state.activeVisit.capacity,
+        organisedBy: state.activeVisit.organisedBy,
+        status: 'Roster Saved'
+      };
+      state.visits.push(visitRecord);
+    } else {
+      visitRecord.status = 'Roster Saved';
+      visitRecord.capacity = state.activeVisit.capacity;
+      visitRecord.date = state.activeVisit.date;
+      visitRecord.organisedBy = state.activeVisit.organisedBy;
+    }
+
+    state.activeVisit.status = 'Roster Saved';
+
+    // Store in temporary database (Main member database remains completely untouched!)
+    state.visitRosters[visitId] = {
+      visitId: visitId,
+      company: state.activeVisit.company,
+      date: state.activeVisit.date,
+      capacity: state.activeVisit.capacity,
+      organisedBy: state.activeVisit.organisedBy,
+      status: 'Roster Saved',
+      participants: participants,
+      lastSaved: new Date().toISOString()
+    };
+
+    saveState();
+
+    const confCount = participants.filter(p => p.rsvpStatus === 'Confirmed').length;
+    showToast(`✓ Temporary roster for ${state.activeVisit.company} (${participants.length} delegates, ${confCount} confirmed) saved to Visit Database. Main DB untouched!`);
+
+    renderVisitsHistory();
+    renderRsvpManager();
+  }
+
+  function getVisitRosterById(visitId) {
+    if (state.visitRosters && state.visitRosters[visitId]) {
+      return state.visitRosters[visitId];
+    }
+
+    // Find visit metadata
+    const visit = state.visits.find(v => v.id === visitId) || (state.activeVisit && state.activeVisit.id === visitId ? state.activeVisit : null);
+    if (!visit) return null;
+
+    // Check if this matches active visit with selected applicants
+    if (state.activeVisit && state.activeVisit.id === visitId && state.selectedNics.size > 0) {
+      const selected = state.applicants.filter(a => state.selectedNics.has(a.nic));
+      return {
+        visitId: visit.id,
+        company: visit.company,
+        date: visit.date,
+        capacity: visit.capacity,
+        organisedBy: visit.organisedBy,
+        status: visit.status || 'Shortlisting',
+        participants: selected.map((app, idx) => ({
+          id: app.id || `PART-${idx + 1}`,
+          name: app.name,
+          nic: app.nic,
+          ieeeNumber: app.ieeeNumber || '',
+          isMember: app.isMember || false,
+          phone: app.phone || '',
+          email: app.email || '',
+          degree: app.degree || '',
+          year: app.year || '',
+          dietary: app.dietary || 'Non-Veg',
+          rsvpStatus: state.rsvpStatuses[app.nic] || 'Pending',
+          attended: state.attendedNics.has(app.nic),
+          notes: app.confirmationNote || ''
+        })),
+        lastSaved: null
+      };
+    }
+
+    // Historical completed visits recorded in state.members
+    const attendees = state.members.filter(m => m.visitsAttended && m.visitsAttended.includes(visit.company));
+    if (attendees.length > 0) {
+      return {
+        visitId: visit.id,
+        company: visit.company,
+        date: visit.date,
+        capacity: visit.capacity || attendees.length,
+        organisedBy: visit.organisedBy || 'IEEE Student Branch',
+        status: 'Completed',
+        isHistorical: true,
+        participants: attendees.map((m, idx) => ({
+          id: `HIST-${m.id || idx + 1}`,
+          name: m.name,
+          nic: m.nic,
+          ieeeNumber: m.ieeeNumber || '',
+          isMember: Boolean(m.ieeeNumber && m.ieeeNumber.length > 5),
+          phone: m.phone || '',
+          email: m.email || '',
+          degree: m.degree || 'Computing',
+          year: m.year || '3rd Year',
+          dietary: m.dietary || 'Non-Veg',
+          rsvpStatus: 'Confirmed',
+          attended: true,
+          notes: 'Master Database Recorded Attendee'
+        })),
+        lastSaved: visit.date
+      };
+    }
+
+    return {
+      visitId: visit.id,
+      company: visit.company,
+      date: visit.date,
+      capacity: visit.capacity,
+      organisedBy: visit.organisedBy,
+      status: visit.status || 'Planning',
+      participants: [],
+      lastSaved: null
+    };
+  }
+
+  // --- 12. VISITS ARCHIVE & TEMPORARY ROSTER CARDS (TAB 5) ---
   function renderVisitsHistory() {
     const container = document.getElementById('visits-archive-grid');
     if (!container) return;
 
-    const companies = ['Atlas Labs', 'WSO2', 'Codegen', 'Orange', 'Rootcode', 'IFS', 'Zone24x7', 'Cambio'];
+    let visitsList = [...state.visits];
     
-    container.innerHTML = companies.map(comp => {
-      const attendees = state.members.filter(m => m.visitsAttended && m.visitsAttended.includes(comp));
+    // Sort: upcoming / roster-saved first, then chronological
+    visitsList.sort((a, b) => {
+      const isSavedA = Boolean(state.visitRosters[a.id]);
+      const isSavedB = Boolean(state.visitRosters[b.id]);
+      if (isSavedA && !isSavedB) return -1;
+      if (!isSavedA && isSavedB) return 1;
+      return (b.date || '').localeCompare(a.date || '');
+    });
+
+    // Search filter
+    const searchVal = (document.getElementById('history-search-input')?.value || '').toLowerCase().trim();
+    if (searchVal) {
+      visitsList = visitsList.filter(v => 
+        (v.company && v.company.toLowerCase().includes(searchVal)) || 
+        (v.organisedBy && v.organisedBy.toLowerCase().includes(searchVal)) ||
+        (v.date && v.date.includes(searchVal))
+      );
+    }
+
+    // Status filter
+    const statusVal = document.getElementById('history-filter-status')?.value || 'ALL';
+    if (statusVal === 'ROSTER_SAVED') {
+      visitsList = visitsList.filter(v => Boolean(state.visitRosters[v.id]) || v.status === 'Roster Saved');
+    } else if (statusVal === 'COMPLETED') {
+      visitsList = visitsList.filter(v => v.status === 'Completed');
+    }
+
+    if (visitsList.length === 0) {
+      container.innerHTML = `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 3rem; color: var(--text-muted);">
+          No industry visits found matching your filters.
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = visitsList.map(v => {
+      const roster = getVisitRosterById(v.id);
+      const parts = roster ? roster.participants : [];
+      const totalParts = parts.length;
+      const confParts = parts.filter(p => p.rsvpStatus === 'Confirmed').length;
+      const attParts = parts.filter(p => p.attended).length;
+
+      const hasTempDb = Boolean(state.visitRosters[v.id]);
+
+      let badgeHtml = '';
+      if (v.status === 'Completed') {
+        badgeHtml = `<span class="badge badge-emerald">Completed</span>`;
+      } else if (hasTempDb || v.status === 'Roster Saved') {
+        badgeHtml = `<span class="badge badge-indigo">Pre-Visit Roster</span>`;
+      } else {
+        badgeHtml = `<span class="badge badge-amber">Shortlisting</span>`;
+      }
+
+      const dbTag = hasTempDb 
+        ? `<span style="font-size: 0.75rem; color: #818cf8; display: flex; align-items: center; gap: 0.3rem;">⚡ Temporary Visit DB (${totalParts} delegates)</span>`
+        : (v.status === 'Completed' 
+            ? `<span style="font-size: 0.75rem; color: var(--emerald-400); display: flex; align-items: center; gap: 0.3rem;">✓ Main Database Verified</span>`
+            : `<span style="font-size: 0.75rem; color: var(--text-muted);">Draft / In Progress</span>`);
+
       return `
         <div class="visit-archive-card">
           <div class="visit-card-top">
-            <span class="badge badge-emerald">Completed</span>
-            <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 700; color: var(--emerald-400);">${attendees.length} Attendees</span>
+            ${badgeHtml}
+            <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 700; color: var(--emerald-400);">
+              ${attParts > 0 ? `${attParts} Attended` : `${totalParts} Delegates`}
+            </span>
           </div>
-          <h4 class="visit-card-name">${escapeHtml(comp)}</h4>
+
+          <h4 class="visit-card-name">${escapeHtml(v.company)}</h4>
+
           <div class="visit-card-meta">
-            <span>IEEE Student Branch of SLIIT</span>
-            <span>Recorded in Master Tracking Sheet</span>
+            <span>📅 ${escapeHtml(v.date || 'TBD')} &bull; Capacity: ${v.capacity || 25}</span>
+            <span>🏛️ ${escapeHtml(v.organisedBy || 'IEEE Student Branch')}</span>
+            ${dbTag}
+            ${confParts > 0 ? `<span style="color: var(--text-secondary); font-size: 0.75rem;">RSVPs: <strong>${confParts}</strong> Confirmed</span>` : ''}
+          </div>
+
+          <div class="visit-card-actions">
+            <button class="btn btn-primary btn-sm btn-open-visit-roster" data-visit-id="${escapeHtml(v.id)}" title="View/edit participant details and mark attendance during visit">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 14px; height: 14px;">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              View/Edit Roster
+            </button>
+            <button class="btn btn-secondary btn-sm btn-download-visit-excel" data-visit-id="${escapeHtml(v.id)}" title="Download Excel roster for this visit">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width: 14px; height: 14px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+              </svg>
+              Download (.xlsx)
+            </button>
+            <button class="btn btn-ghost btn-sm btn-load-visit-workspace" data-visit-id="${escapeHtml(v.id)}" title="Set as active visit in Selection & RSVP workspace">
+              Open in Session
+            </button>
           </div>
         </div>
       `;
     }).join('');
+
+    // Attach card button listeners
+    container.querySelectorAll('.btn-open-visit-roster').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const visitId = e.currentTarget.getAttribute('data-visit-id');
+        openVisitRosterModal(visitId);
+      });
+    });
+
+    container.querySelectorAll('.btn-download-visit-excel').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const visitId = e.currentTarget.getAttribute('data-visit-id');
+        downloadVisitRosterExcel(visitId);
+      });
+    });
+
+    container.querySelectorAll('.btn-load-visit-workspace').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const visitId = e.currentTarget.getAttribute('data-visit-id');
+        loadVisitIntoActiveSession(visitId);
+      });
+    });
   }
 
-  // --- 12. EXCEL EXPORT FUNCTIONS ---
+  // --- 13. VISIT ROSTER MODAL: VIEW / EDIT & ON-SITE ATTENDANCE ---
+  function openVisitRosterModal(visitId) {
+    state.modalActiveVisitId = visitId;
+    const visit = state.visits.find(v => v.id === visitId) || state.activeVisit;
+    let roster = getVisitRosterById(visitId);
+
+    // If not yet stored in temporary visit database, initialize it now
+    if (!state.visitRosters[visitId]) {
+      state.visitRosters[visitId] = JSON.parse(JSON.stringify(roster));
+      roster = state.visitRosters[visitId];
+    }
+
+    document.getElementById('modal-roster-title').textContent = `Visit Roster & On-Site Attendance: ${visit.company}`;
+    document.getElementById('modal-roster-subtitle').textContent = `📅 ${visit.date || 'TBD'} • Capacity: ${visit.capacity || 25} • Organised by: ${visit.organisedBy || 'IEEE SLIIT'}`;
+
+    const tagEl = document.getElementById('modal-db-tag');
+    if (tagEl) {
+      if (visit.status === 'Completed') {
+        tagEl.className = 'badge badge-emerald';
+        tagEl.textContent = 'Committed to Main';
+      } else {
+        tagEl.className = 'badge badge-indigo';
+        tagEl.textContent = 'Temporary Visit Database';
+      }
+    }
+
+    const searchInput = document.getElementById('modal-roster-search');
+    if (searchInput) searchInput.value = '';
+    const filterStatus = document.getElementById('modal-roster-filter-status');
+    if (filterStatus) filterStatus.value = 'ALL';
+
+    state.modalSearchQuery = '';
+    state.modalFilterStatus = 'ALL';
+
+    renderModalRosterTable();
+    document.getElementById('modal-visit-roster')?.classList.remove('hidden');
+  }
+
+  function renderModalRosterTable() {
+    const visitId = state.modalActiveVisitId;
+    if (!visitId) return;
+
+    const roster = state.visitRosters[visitId];
+    if (!roster) return;
+
+    let parts = roster.participants || [];
+
+    // Stats
+    const total = parts.length;
+    const confCount = parts.filter(p => p.rsvpStatus === 'Confirmed').length;
+    const pendCount = parts.filter(p => p.rsvpStatus === 'Pending').length;
+    const declCount = parts.filter(p => p.rsvpStatus === 'Declined').length;
+    const attCount = parts.filter(p => p.attended).length;
+    const vegCount = parts.filter(p => p.dietary === 'Veg').length;
+    const nonVegCount = total - vegCount;
+
+    document.getElementById('mstat-total').textContent = total;
+    document.getElementById('mstat-confirmed').textContent = confCount;
+    document.getElementById('mstat-pending').textContent = pendCount;
+    document.getElementById('mstat-declined').textContent = declCount;
+    document.getElementById('mstat-attended').textContent = `${attCount} / ${total}`;
+    document.getElementById('mstat-dietary').textContent = `${vegCount} Veg / ${nonVegCount} Non-Veg`;
+
+    // Filter by search query
+    const q = (state.modalSearchQuery || '').toLowerCase().trim();
+    if (q) {
+      parts = parts.filter(p => 
+        (p.name && p.name.toLowerCase().includes(q)) ||
+        (p.nic && p.nic.toLowerCase().includes(q)) ||
+        (p.phone && p.phone.includes(q)) ||
+        (p.email && p.email.toLowerCase().includes(q)) ||
+        (p.ieeeNumber && p.ieeeNumber.includes(q))
+      );
+    }
+
+    // Filter by status
+    if (state.modalFilterStatus === 'CONFIRMED') {
+      parts = parts.filter(p => p.rsvpStatus === 'Confirmed');
+    } else if (state.modalFilterStatus === 'ATTENDED') {
+      parts = parts.filter(p => p.attended);
+    } else if (state.modalFilterStatus === 'NOT_ATTENDED') {
+      parts = parts.filter(p => !p.attended);
+    }
+
+    const tbody = document.getElementById('tbody-modal-roster');
+    if (!tbody) return;
+
+    if (parts.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 2.5rem; color: var(--text-muted);">No participants found matching the criteria. Click "+ Add Walk-In Delegate" above to register participants.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = parts.map((p, idx) => {
+      const isAttended = Boolean(p.attended);
+      const isMember = Boolean(p.ieeeNumber && p.ieeeNumber.length > 5);
+      const memberBadge = isMember 
+        ? `<span class="badge badge-indigo" title="IEEE Member: ${escapeHtml(p.ieeeNumber)}">IEEE</span>` 
+        : `<span class="badge badge-subtle">Non-Member</span>`;
+      
+      const cleanPhone = (p.phone || '').replace(/[^0-9]/g, '');
+      const waLink = cleanPhone ? `https://wa.me/94${cleanPhone.startsWith('0') ? cleanPhone.slice(1) : cleanPhone}` : '#';
+
+      return `
+        <tr style="${isAttended ? 'background: rgba(16, 185, 129, 0.05);' : ''}">
+          <td style="font-family: 'JetBrains Mono', monospace; color: var(--text-muted); text-align: center;">${idx + 1}</td>
+          <td style="text-align: center;">
+            <input type="checkbox" class="attend-toggle-large m-attend-cb" data-part-id="${escapeHtml(p.id)}" ${isAttended ? 'checked' : ''} title="Tick to mark attendance on-site">
+          </td>
+          <td>
+            <strong>${escapeHtml(p.name)}</strong>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">${escapeHtml(p.degree || '')} ${p.year ? `&bull; ${escapeHtml(p.year)}` : ''}</div>
+          </td>
+          <td><code>${escapeHtml(p.nic)}</code></td>
+          <td>
+            ${memberBadge}
+            ${p.ieeeNumber ? `<div style="font-size: 0.75rem; color: var(--text-secondary);">${escapeHtml(p.ieeeNumber)}</div>` : ''}
+          </td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.4rem;">
+              <span>${escapeHtml(p.phone || '-')}</span>
+              ${cleanPhone ? `<a href="${waLink}" target="_blank" title="WhatsApp Chat" style="color: #25D366; text-decoration: none;">💬</a>` : ''}
+            </div>
+          </td>
+          <td><span style="font-size: 0.8rem; color: var(--text-secondary);">${escapeHtml(p.email || '-')}</span></td>
+          <td>
+            <span class="badge ${p.dietary === 'Veg' ? 'badge-emerald' : 'badge-subtle'}">${escapeHtml(p.dietary || 'Non-Veg')}</span>
+          </td>
+          <td>
+            <select class="status-pill-select status-${(p.rsvpStatus || 'pending').toLowerCase()} m-rsvp-select" data-part-id="${escapeHtml(p.id)}">
+              <option value="Confirmed" ${p.rsvpStatus === 'Confirmed' ? 'selected' : ''}>Confirmed</option>
+              <option value="Pending" ${p.rsvpStatus === 'Pending' ? 'selected' : ''}>Pending</option>
+              <option value="Declined" ${p.rsvpStatus === 'Declined' ? 'selected' : ''}>Declined</option>
+            </select>
+          </td>
+          <td style="text-align: center;">
+            <div style="display: flex; justify-content: center; gap: 0.35rem;">
+              <button class="btn btn-secondary btn-sm btn-edit-roster-part" data-part-id="${escapeHtml(p.id)}" title="Edit participant details">
+                ✎
+              </button>
+              <button class="btn btn-ghost danger btn-sm btn-delete-roster-part" data-part-id="${escapeHtml(p.id)}" title="Remove from this roster">
+                ✕
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Attendance toggle listener
+    tbody.querySelectorAll('.m-attend-cb').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        const partId = e.currentTarget.getAttribute('data-part-id');
+        const target = roster.participants.find(p => p.id === partId);
+        if (target) {
+          target.attended = e.currentTarget.checked;
+          if (state.activeVisit && state.activeVisit.id === visitId) {
+            if (target.attended) state.attendedNics.add(target.nic);
+            else state.attendedNics.delete(target.nic);
+          }
+          saveState();
+          renderModalRosterTable();
+        }
+      });
+    });
+
+    // RSVP select listener
+    tbody.querySelectorAll('.m-rsvp-select').forEach(sel => {
+      sel.addEventListener('change', (e) => {
+        const partId = e.currentTarget.getAttribute('data-part-id');
+        const target = roster.participants.find(p => p.id === partId);
+        if (target) {
+          target.rsvpStatus = e.currentTarget.value;
+          if (state.activeVisit && state.activeVisit.id === visitId) {
+            state.rsvpStatuses[target.nic] = target.rsvpStatus;
+          }
+          saveState();
+          renderModalRosterTable();
+        }
+      });
+    });
+
+    // Edit participant listener
+    tbody.querySelectorAll('.btn-edit-roster-part').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const partId = e.currentTarget.getAttribute('data-part-id');
+        openEditParticipantModal(partId);
+      });
+    });
+
+    // Delete participant listener
+    tbody.querySelectorAll('.btn-delete-roster-part').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const partId = e.currentTarget.getAttribute('data-part-id');
+        const target = roster.participants.find(p => p.id === partId);
+        if (!target) return;
+        if (confirm(`Remove ${target.name} from the ${roster.company} visit roster?`)) {
+          roster.participants = roster.participants.filter(p => p.id !== partId);
+          saveState();
+          renderModalRosterTable();
+          showToast(`Removed ${target.name} from roster.`);
+        }
+      });
+    });
+  }
+
+  // --- 14. EDIT PARTICIPANT DETAILS ---
+  function openEditParticipantModal(partId) {
+    const visitId = state.modalActiveVisitId;
+    if (!visitId || !state.visitRosters[visitId]) return;
+    const roster = state.visitRosters[visitId];
+    const part = roster.participants.find(p => p.id === partId);
+    if (!part) return;
+
+    document.getElementById('edit-part-id').value = part.id;
+    document.getElementById('edit-part-name').value = part.name || '';
+    document.getElementById('edit-part-nic').value = part.nic || '';
+    document.getElementById('edit-part-ieee').value = part.ieeeNumber || '';
+    document.getElementById('edit-part-phone').value = part.phone || '';
+    document.getElementById('edit-part-email').value = part.email || '';
+    document.getElementById('edit-part-dietary').value = part.dietary || 'Non-Veg';
+    document.getElementById('edit-part-rsvp').value = part.rsvpStatus || 'Confirmed';
+    document.getElementById('edit-part-attended').checked = Boolean(part.attended);
+    document.getElementById('edit-part-notes').value = part.notes || '';
+
+    document.getElementById('modal-edit-participant')?.classList.remove('hidden');
+  }
+
+  document.getElementById('form-edit-participant')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const visitId = state.modalActiveVisitId;
+    if (!visitId || !state.visitRosters[visitId]) return;
+    const roster = state.visitRosters[visitId];
+    const partId = document.getElementById('edit-part-id').value;
+    const part = roster.participants.find(p => p.id === partId);
+    if (!part) return;
+
+    part.name = document.getElementById('edit-part-name').value.trim();
+    part.nic = document.getElementById('edit-part-nic').value.trim();
+    part.ieeeNumber = document.getElementById('edit-part-ieee').value.trim();
+    part.isMember = Boolean(part.ieeeNumber && part.ieeeNumber.length > 5);
+    part.phone = document.getElementById('edit-part-phone').value.trim();
+    part.email = document.getElementById('edit-part-email').value.trim();
+    part.dietary = document.getElementById('edit-part-dietary').value;
+    part.rsvpStatus = document.getElementById('edit-part-rsvp').value;
+    part.attended = document.getElementById('edit-part-attended').checked;
+    part.notes = document.getElementById('edit-part-notes').value.trim();
+
+    if (state.activeVisit && state.activeVisit.id === visitId) {
+      state.rsvpStatuses[part.nic] = part.rsvpStatus;
+      if (part.attended) state.attendedNics.add(part.nic);
+      else state.attendedNics.delete(part.nic);
+    }
+
+    saveState();
+    document.getElementById('modal-edit-participant')?.classList.add('hidden');
+    renderModalRosterTable();
+    showToast(`Updated details for ${part.name}`);
+  });
+
+  // --- 15. ADD WALK-IN DELEGATE ---
+  document.getElementById('form-add-roster-participant')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const visitId = state.modalActiveVisitId;
+    if (!visitId || !state.visitRosters[visitId]) return;
+    const roster = state.visitRosters[visitId];
+
+    const name = document.getElementById('add-part-name').value.trim();
+    const nic = document.getElementById('add-part-nic').value.trim();
+    const ieee = document.getElementById('add-part-ieee').value.trim();
+    const phone = document.getElementById('add-part-phone').value.trim();
+    const email = document.getElementById('add-part-email').value.trim();
+    const dietary = document.getElementById('add-part-dietary').value;
+    const rsvp = document.getElementById('add-part-rsvp').value;
+    const attended = document.getElementById('add-part-attended').checked;
+
+    const newPart = {
+      id: `WALK-${Date.now()}`,
+      name,
+      nic,
+      ieeeNumber: ieee,
+      isMember: Boolean(ieee && ieee.length > 5),
+      phone,
+      email,
+      degree: 'Walk-In Delegate',
+      year: '',
+      dietary,
+      rsvpStatus: rsvp,
+      attended,
+      notes: 'Added on-site during visit'
+    };
+
+    roster.participants.push(newPart);
+
+    if (state.activeVisit && state.activeVisit.id === visitId) {
+      state.selectedNics.add(nic);
+      state.rsvpStatuses[nic] = rsvp;
+      if (attended) state.attendedNics.add(nic);
+    }
+
+    saveState();
+    document.getElementById('modal-add-roster-participant')?.classList.add('hidden');
+    renderModalRosterTable();
+    showToast(`Added ${name} to visit roster!`);
+    e.target.reset();
+  });
+
+  // --- 16. COMMIT ATTENDANCE TO MAIN FROM ROSTER ---
+  function commitRosterAttendanceToMain(visitId) {
+    const roster = getVisitRosterById(visitId);
+    if (!roster || !roster.participants) {
+      showToast('No roster found to commit.', 'error');
+      return;
+    }
+
+    const attendedParticipants = roster.participants.filter(p => p.attended);
+    if (attendedParticipants.length === 0) {
+      showToast('No participants marked as Attended. Please tick attendance checkboxes first.', 'error');
+      return;
+    }
+
+    if (!confirm(`Commit attendance for ${attendedParticipants.length} attendees of ${roster.company} to the Main Master Database? This will update each member's total visit count and recorded companies.`)) {
+      return;
+    }
+
+    const company = roster.company;
+    let newEnrolled = 0;
+    let updatedCount = 0;
+
+    attendedParticipants.forEach(p => {
+      let member = state.members.find(m => m.nic.toLowerCase() === p.nic.toLowerCase());
+      if (member) {
+        if (!member.visitsAttended) member.visitsAttended = [];
+        if (!member.visitsAttended.includes(company)) {
+          member.visitsAttended.push(company);
+          member.totalVisits = member.visitsAttended.length;
+          updatedCount++;
+        }
+      } else {
+        state.members.push({
+          id: `MEM-${state.members.length + 1}`,
+          name: p.name,
+          nic: p.nic,
+          ieeeNumber: p.ieeeNumber || '',
+          phone: p.phone || '',
+          email: p.email || '',
+          visitsAttended: [company],
+          totalVisits: 1,
+          blacklisted: false,
+          blacklistReason: ''
+        });
+        newEnrolled++;
+      }
+    });
+
+    roster.status = 'Completed';
+    const visitRecord = state.visits.find(v => v.id === visitId || v.company.toLowerCase() === company.toLowerCase());
+    if (visitRecord) {
+      visitRecord.status = 'Completed';
+      visitRecord.attendeeCount = attendedParticipants.length;
+    }
+    if (state.activeVisit && state.activeVisit.id === visitId) {
+      state.activeVisit.status = 'Completed';
+    }
+
+    saveState();
+    renderMasterRoster();
+    renderVisitsHistory();
+    renderModalRosterTable();
+    showToast(`✓ Attendance locked! Updated ${updatedCount} members and enrolled ${newEnrolled} new members into Main.`);
+  }
+
+  // --- 17. LOAD VISIT INTO ACTIVE SESSION ---
+  function loadVisitIntoActiveSession(visitId) {
+    const visit = state.visits.find(v => v.id === visitId);
+    if (!visit) return;
+    const roster = getVisitRosterById(visitId);
+
+    state.activeVisit = {
+      id: visit.id,
+      company: visit.company,
+      date: visit.date,
+      capacity: visit.capacity || 25,
+      organisedBy: visit.organisedBy || 'IEEE SLIIT',
+      status: visit.status || 'Shortlisting'
+    };
+
+    if (roster && roster.participants && roster.participants.length > 0) {
+      state.selectedNics.clear();
+      state.attendedNics.clear();
+      state.rsvpStatuses = {};
+
+      roster.participants.forEach(p => {
+        state.selectedNics.add(p.nic);
+        state.rsvpStatuses[p.nic] = p.rsvpStatus || 'Pending';
+        if (p.attended) state.attendedNics.add(p.nic);
+      });
+
+      roster.participants.forEach(p => {
+        if (!state.applicants.find(a => a.nic === p.nic)) {
+          state.applicants.push({
+            id: p.id,
+            name: p.name,
+            nic: p.nic,
+            ieeeNumber: p.ieeeNumber,
+            isMember: p.isMember,
+            phone: p.phone,
+            email: p.email,
+            degree: p.degree,
+            year: p.year,
+            dietary: p.dietary,
+            timestamp: new Date().toISOString(),
+            totalVisits: 0,
+            blacklisted: false,
+            blacklistReason: '',
+            unmatched: false
+          });
+        }
+      });
+    }
+
+    saveState();
+    showToast(`Loaded ${visit.company} into active session!`);
+    const rsvpTab = document.querySelector('[data-tab="tab-rsvp"]');
+    if (rsvpTab) rsvpTab.click();
+  }
+
+  // --- 18. EXCEL EXPORT FUNCTIONS ---
+  function downloadVisitRosterExcel(visitId) {
+    const roster = getVisitRosterById(visitId);
+    if (!roster || !roster.participants || roster.participants.length === 0) {
+      showToast('No participants found in this visit roster to export.', 'error');
+      return;
+    }
+
+    const exportData = roster.participants.map((p, idx) => ({
+      '#': idx + 1,
+      'Full Name': p.name,
+      'NIC': p.nic,
+      'IEEE Membership #': p.ieeeNumber || '',
+      'Phone Number': p.phone || '',
+      'Email Address': p.email || '',
+      'Degree Program': p.degree || '',
+      'Year of Study': p.year || '',
+      'Dietary Preference': p.dietary || 'Non-Veg',
+      'RSVP Status': p.rsvpStatus || 'Pending',
+      'Attended (On-Site)': p.attended ? 'YES' : 'NO',
+      'Notes': p.notes || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Visit Roster');
+    const safeComp = (roster.company || 'Visit').replace(/[^a-zA-Z0-9]/g, '_');
+    XLSX.writeFile(workbook, `${safeComp}_Visit_Roster_${roster.date || new Date().toISOString().slice(0, 10)}.xlsx`);
+    showToast(`✓ Exported ${exportData.length} delegates for ${roster.company}!`);
+  }
+
   // Export All Members
   document.getElementById('btn-export-all-members')?.addEventListener('click', () => {
     showToast('Exporting Master Database to Excel...');
@@ -1288,15 +2074,92 @@ chathumina@ieee.org`;
       .replace(/'/g, '&#039;');
   }
 
-  // --- BOOTSTRAP ---
+  // --- 19. ATTACH GLOBAL LISTENERS & BOOTSTRAP ---
+  // Save temporary roster buttons
+  document.querySelectorAll('#btn-save-temp-roster, #btn-save-temp-roster-sel').forEach(btn => {
+    btn?.addEventListener('click', saveCurrentRosterToVisitDb);
+  });
+
+  // Download roster button in RSVP tab
+  document.getElementById('btn-export-rsvp-excel')?.addEventListener('click', () => {
+    downloadVisitRosterExcel(state.activeVisit.id);
+  });
+
+  // Visits History filters
+  document.getElementById('history-search-input')?.addEventListener('input', renderVisitsHistory);
+  document.getElementById('history-filter-status')?.addEventListener('change', renderVisitsHistory);
+
+  // Modal controls for #modal-visit-roster
+  document.getElementById('modal-roster-search')?.addEventListener('input', (e) => {
+    state.modalSearchQuery = e.target.value;
+    renderModalRosterTable();
+  });
+
+  document.getElementById('modal-roster-filter-status')?.addEventListener('change', (e) => {
+    state.modalFilterStatus = e.target.value;
+    renderModalRosterTable();
+  });
+
+  document.getElementById('btn-modal-mark-all-confirmed')?.addEventListener('click', () => {
+    const visitId = state.modalActiveVisitId;
+    if (!visitId || !state.visitRosters[visitId]) return;
+    const roster = state.visitRosters[visitId];
+    let count = 0;
+    roster.participants.forEach(p => {
+      if (p.rsvpStatus === 'Confirmed') {
+        p.attended = true;
+        if (state.activeVisit && state.activeVisit.id === visitId) state.attendedNics.add(p.nic);
+        count++;
+      }
+    });
+    saveState();
+    renderModalRosterTable();
+    showToast(`Marked ${count} confirmed delegates as Attended!`);
+  });
+
+  document.getElementById('btn-modal-clear-attendance')?.addEventListener('click', () => {
+    const visitId = state.modalActiveVisitId;
+    if (!visitId || !state.visitRosters[visitId]) return;
+    const roster = state.visitRosters[visitId];
+    roster.participants.forEach(p => {
+      p.attended = false;
+      if (state.activeVisit && state.activeVisit.id === visitId) state.attendedNics.delete(p.nic);
+    });
+    saveState();
+    renderModalRosterTable();
+    showToast('Cleared on-site attendance markings.');
+  });
+
+  document.getElementById('btn-modal-add-participant')?.addEventListener('click', () => {
+    document.getElementById('modal-add-roster-participant')?.classList.remove('hidden');
+  });
+
+  document.getElementById('btn-modal-download-excel')?.addEventListener('click', () => {
+    downloadVisitRosterExcel(state.modalActiveVisitId);
+  });
+
+  document.getElementById('btn-modal-save-changes')?.addEventListener('click', () => {
+    saveState();
+    showToast('✓ Saved changes to Temporary Visit Database!');
+    renderVisitsHistory();
+  });
+
+  document.getElementById('btn-modal-commit-main')?.addEventListener('click', () => {
+    commitRosterAttendanceToMain(state.modalActiveVisitId);
+  });
+
+  // Bootstrap
   document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
     updateKPIs();
     renderMasterRoster();
 
-    // Auto-load Zone24x7 demo applicants if available so the user sees live data immediately
-    if (window.IVPMS_INITIAL_DATA && window.IVPMS_INITIAL_DATA.sampleApplicants) {
+    // Auto-load applicants if none saved yet in local storage
+    if (state.applicants.length === 0 && window.IVPMS_INITIAL_DATA && window.IVPMS_INITIAL_DATA.sampleApplicants) {
       ingestFormResponses(window.IVPMS_INITIAL_DATA.sampleApplicants);
+    } else {
+      renderSelectionEngine();
+      renderRsvpManager();
     }
   });
 
