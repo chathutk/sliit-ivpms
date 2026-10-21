@@ -16,6 +16,13 @@
   const STORAGE_KEY_ATTENDED = 'ivpms_attended_v2';
   const STORAGE_KEY_SELECTED = 'ivpms_selected_v2';
 
+  // Helper to validate genuine IEEE membership numbers (numeric string, typically 7-10 digits)
+  function isValidIeeeNumber(val) {
+    if (!val) return false;
+    const str = String(val).trim().replace(/^ieee\s*[:#-]?\s*/i, '');
+    return /^\d{6,11}$/.test(str);
+  }
+
   // Load from local storage or initial seed
   function getInitialMembers() {
     let members = [];
@@ -47,6 +54,19 @@
         try { localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(members)); } catch (e) {}
       }
     }
+
+    // Sanitize any non-numeric text mistakenly saved in ieeeNumber (e.g., volunteer descriptions or "No")
+    let sanitized = false;
+    members.forEach(m => {
+      if (m.ieeeNumber && !isValidIeeeNumber(m.ieeeNumber)) {
+        m.ieeeNumber = '';
+        sanitized = true;
+      }
+    });
+    if (sanitized) {
+      try { localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(members)); } catch (e) {}
+    }
+
     return members;
   }
 
@@ -388,8 +408,9 @@
       }
 
       // Membership
-      if (memberFilter === 'MEMBERS' && !m.ieeeNumber) return false;
-      if (memberFilter === 'NON_MEMBERS' && m.ieeeNumber) return false;
+      const isIeee = isValidIeeeNumber(m.ieeeNumber);
+      if (memberFilter === 'MEMBERS' && !isIeee) return false;
+      if (memberFilter === 'NON_MEMBERS' && isIeee) return false;
 
       // Visit Count
       if (visitFilter !== 'ALL') {
@@ -420,7 +441,8 @@
         ? m.visitsAttended.map(c => `<span class="chip">${escapeHtml(c)}</span>`).join('')
         : '<span style="color: var(--text-muted); font-size: 0.75rem;">None</span>';
 
-      const ieeeBadge = m.ieeeNumber
+      const isIeee = isValidIeeeNumber(m.ieeeNumber);
+      const ieeeBadge = isIeee
         ? `<span class="badge badge-emerald" title="IEEE Member: ${escapeHtml(m.ieeeNumber)}">${escapeHtml(m.ieeeNumber)}</span>`
         : `<span class="badge badge-subtle">No ID</span>`;
 
@@ -992,14 +1014,16 @@
       const matchedByIeee = rawIeee ? mainByIeee.get(rawIeee.toLowerCase()) : null;
       const matchedMember = matchedByNic || matchedByIeee;
 
-      const isMember = Boolean(matchedMember?.ieeeNumber || (rawIeee && rawIeee !== 'None' && rawIeee.length > 5));
-      const verifiedIeee = matchedMember?.ieeeNumber || rawIeee;
+      const hasMemberId = isValidIeeeNumber(matchedMember?.ieeeNumber);
+      const hasRawId = isValidIeeeNumber(rawIeee);
+      const isMember = Boolean(hasMemberId || hasRawId);
+      const verifiedIeee = hasMemberId ? matchedMember.ieeeNumber : (hasRawId ? rawIeee : '');
       const totalVisits = matchedMember ? (matchedMember.totalVisits || (matchedMember.visitsAttended ? matchedMember.visitsAttended.length : 0)) : 0;
       const isBlacklisted = matchedMember ? matchedMember.blacklisted : false;
       const blacklistReason = matchedMember ? matchedMember.blacklistReason : '';
 
       // Check unmatched warning
-      const unmatched = Boolean(rawIeee && !matchedMember && rawIeee.length > 5);
+      const unmatched = Boolean(hasRawId && !matchedMember);
 
       // Map RSVP status from CSV confirmation if present
       let initialRsvp = 'Pending';
@@ -1554,7 +1578,7 @@ chathumina@ieee.org`;
           name: m.name,
           nic: m.nic,
           ieeeNumber: m.ieeeNumber || '',
-          isMember: Boolean(m.ieeeNumber && m.ieeeNumber.length > 5),
+          isMember: isValidIeeeNumber(m.ieeeNumber),
           phone: m.phone || '',
           email: m.email || '',
           degree: m.degree || 'Computing',
@@ -1804,7 +1828,7 @@ chathumina@ieee.org`;
 
     tbody.innerHTML = parts.map((p, idx) => {
       const isAttended = Boolean(p.attended);
-      const isMember = Boolean(p.ieeeNumber && p.ieeeNumber.length > 5);
+      const isMember = isValidIeeeNumber(p.ieeeNumber);
       const memberBadge = isMember 
         ? `<span class="badge badge-indigo" title="IEEE Member: ${escapeHtml(p.ieeeNumber)}">IEEE</span>` 
         : `<span class="badge badge-subtle">Non-Member</span>`;
@@ -1949,7 +1973,7 @@ chathumina@ieee.org`;
     part.name = document.getElementById('edit-part-name').value.trim();
     part.nic = document.getElementById('edit-part-nic').value.trim();
     part.ieeeNumber = document.getElementById('edit-part-ieee').value.trim();
-    part.isMember = Boolean(part.ieeeNumber && part.ieeeNumber.length > 5);
+    part.isMember = isValidIeeeNumber(part.ieeeNumber);
     part.phone = document.getElementById('edit-part-phone').value.trim();
     part.email = document.getElementById('edit-part-email').value.trim();
     part.dietary = document.getElementById('edit-part-dietary').value;
