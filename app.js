@@ -18,25 +18,71 @@
 
   // Load from local storage or initial seed
   function getInitialMembers() {
+    let members = [];
     const saved = localStorage.getItem(STORAGE_KEY_MEMBERS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) members = parsed;
+      } catch (e) {
+        console.error('Failed to parse saved members:', e);
+      }
     }
-    if (window.IVPMS_INITIAL_DATA && window.IVPMS_INITIAL_DATA.members) {
-      return JSON.parse(JSON.stringify(window.IVPMS_INITIAL_DATA.members));
+    const seedMembers = (window.IVPMS_INITIAL_DATA && window.IVPMS_INITIAL_DATA.members) || [];
+    if (members.length === 0) {
+      members = JSON.parse(JSON.stringify(seedMembers));
+    } else if (seedMembers.length > 0) {
+      // Non-destructively merge missing members from seed (e.g. Lion Brewery members MEM-251 to MEM-263)
+      const existingNics = new Set(members.map(m => (m.nic || '').trim().toLowerCase()).filter(Boolean));
+      let added = false;
+      seedMembers.forEach(sm => {
+        const nicKey = (sm.nic || '').trim().toLowerCase();
+        if (nicKey && !existingNics.has(nicKey)) {
+          members.push(JSON.parse(JSON.stringify(sm)));
+          existingNics.add(nicKey);
+          added = true;
+        }
+      });
+      if (added) {
+        try { localStorage.setItem(STORAGE_KEY_MEMBERS, JSON.stringify(members)); } catch (e) {}
+      }
     }
-    return [];
+    return members;
   }
 
   function getInitialVisits() {
+    let visits = [];
     const saved = localStorage.getItem(STORAGE_KEY_VISITS);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) visits = parsed;
+      } catch (e) {
+        console.error('Failed to parse saved visits:', e);
+      }
     }
-    if (window.IVPMS_INITIAL_DATA && window.IVPMS_INITIAL_DATA.visits) {
-      return JSON.parse(JSON.stringify(window.IVPMS_INITIAL_DATA.visits));
+    const seedVisits = (window.IVPMS_INITIAL_DATA && window.IVPMS_INITIAL_DATA.visits) || [];
+    if (visits.length === 0) {
+      visits = JSON.parse(JSON.stringify(seedVisits));
+    } else if (seedVisits.length > 0) {
+      // Non-destructively merge missing visits from seed (e.g. VIS-009 Lion Brewery)
+      const existingIds = new Set(visits.map(v => v.id));
+      const existingNames = new Set(visits.map(v => (v.company || '').trim().toLowerCase()).filter(Boolean));
+      let added = false;
+      seedVisits.forEach(sv => {
+        const nameKey = (sv.company || '').trim().toLowerCase();
+        if (!existingIds.has(sv.id) && !existingNames.has(nameKey)) {
+          visits.push(JSON.parse(JSON.stringify(sv)));
+          existingIds.add(sv.id);
+          existingNames.add(nameKey);
+          added = true;
+        }
+      });
+      if (added) {
+        try { localStorage.setItem(STORAGE_KEY_VISITS, JSON.stringify(visits)); } catch (e) {}
+      }
     }
-    return [];
+    return visits;
   }
 
   function getInitialRosters() {
@@ -158,6 +204,112 @@
     if (blEl) blEl.textContent = blacklistedCount;
   }
 
+  // Synchronize visits from members (e.g. any attended company like Lion Brewery automatically gets registered)
+  function syncVisitsFromMembers() {
+    let changed = false;
+    const companyStats = {};
+    state.members.forEach(m => {
+      if (Array.isArray(m.visitsAttended)) {
+        m.visitsAttended.forEach(c => {
+          if (c && c.trim()) {
+            const comp = c.trim();
+            if (!companyStats[comp]) {
+              companyStats[comp] = { count: 0, originalName: comp };
+            }
+            companyStats[comp].count++;
+          }
+        });
+      }
+    });
+
+    Object.keys(companyStats).forEach(comp => {
+      const stats = companyStats[comp];
+      let existing = state.visits.find(v => (v.company || '').trim().toLowerCase() === comp.toLowerCase());
+      if (!existing) {
+        const newId = `VIS-${String(state.visits.length + 1).padStart(3, '0')}`;
+        existing = {
+          id: newId,
+          company: stats.originalName,
+          date: '2026-10-15',
+          capacity: stats.count,
+          organisedBy: 'IEEE Student Branch',
+          status: 'Completed',
+          attendeeCount: stats.count
+        };
+        state.visits.push(existing);
+        changed = true;
+      } else {
+        if (existing.status === 'Completed' && existing.attendeeCount !== stats.count) {
+          existing.attendeeCount = stats.count;
+          changed = true;
+        }
+        if (stats.count > (existing.capacity || 0)) {
+          existing.capacity = stats.count;
+          changed = true;
+        }
+      }
+    });
+
+    if (changed) {
+      saveState();
+    }
+  }
+
+  // Dynamically populate company filter dropdown with live attendee counts
+  function populateCompanyFilterDropdown() {
+    const sel = document.getElementById('filter-company-visit');
+    if (!sel) return;
+
+    const currentVal = sel.value || 'ALL';
+
+    const companyCounts = {};
+    state.members.forEach(m => {
+      if (Array.isArray(m.visitsAttended)) {
+        m.visitsAttended.forEach(c => {
+          if (c && c.trim()) {
+            const name = c.trim();
+            companyCounts[name] = (companyCounts[name] || 0) + 1;
+          }
+        });
+      }
+    });
+
+    state.visits.forEach(v => {
+      if (v.company && companyCounts[v.company] === undefined) {
+        companyCounts[v.company] = 0;
+      }
+    });
+
+    const orderedCompanies = [];
+    const seen = new Set();
+    state.visits.forEach(v => {
+      if (v.company && !seen.has(v.company)) {
+        seen.add(v.company);
+        orderedCompanies.push(v.company);
+      }
+    });
+    Object.keys(companyCounts).forEach(c => {
+      if (!seen.has(c)) {
+        seen.add(c);
+        orderedCompanies.push(c);
+      }
+    });
+
+    let html = '<option value="ALL">All Visits</option>';
+    orderedCompanies.forEach(comp => {
+      const count = companyCounts[comp] || 0;
+      html += `<option value="${escapeHtml(comp)}">${escapeHtml(comp)} (${count})</option>`;
+    });
+
+    sel.innerHTML = html;
+
+    if (Array.from(sel.options).some(o => o.value === currentVal)) {
+      sel.value = currentVal;
+    } else {
+      sel.value = 'ALL';
+    }
+  }
+
   // --- 2. TAB NAVIGATION ---
   function initNavigation() {
     const tabs = document.querySelectorAll('.nav-tab');
@@ -208,8 +360,13 @@
     const tbody = document.getElementById('roster-tbody');
     if (!tbody) return;
 
+    const filterCompanyEl = document.getElementById('filter-company-visit');
+    if (filterCompanyEl && filterCompanyEl.options.length <= 1) {
+      populateCompanyFilterDropdown();
+    }
+
     const searchTerm = (document.getElementById('roster-search')?.value || '').toLowerCase().trim();
-    const companyFilter = document.getElementById('filter-company-visit')?.value || 'ALL';
+    const companyFilter = filterCompanyEl?.value || 'ALL';
     const memberFilter = document.getElementById('filter-membership')?.value || 'ALL';
     const visitFilter = document.getElementById('filter-visit-count')?.value || 'ALL';
 
@@ -401,7 +558,9 @@
     };
 
     state.members.push(newMember);
+    syncVisitsFromMembers();
     saveState();
+    populateCompanyFilterDropdown();
     closeAllModals();
     renderMasterRoster();
     showToast(`Added ${name} to Main database.`);
@@ -440,6 +599,7 @@
     state.attendedNics.clear();
 
     saveState();
+    populateCompanyFilterDropdown();
     closeAllModals();
     
     // Switch to selection tab
@@ -1133,7 +1293,9 @@
       });
     }
 
+    syncVisitsFromMembers();
     saveState();
+    populateCompanyFilterDropdown();
     renderRsvpManager();
     renderMasterRoster();
     renderVisitsHistory();
@@ -1490,14 +1652,14 @@ chathumina@ieee.org`;
           <div class="visit-card-top">
             ${badgeHtml}
             <span style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; font-weight: 700; color: var(--emerald-400);">
-              ${attParts > 0 ? `${attParts} Attended` : `${totalParts} Delegates`}
+              ${v.status === 'Completed' ? `${attParts || v.attendeeCount || totalParts || 0} Attendees` : (attParts > 0 ? `${attParts} Attended` : `${totalParts} Delegates`)}
             </span>
           </div>
 
           <h4 class="visit-card-name">${escapeHtml(v.company)}</h4>
 
           <div class="visit-card-meta">
-            <span>📅 ${escapeHtml(v.date || 'TBD')} &bull; Capacity: ${v.capacity || 25}</span>
+            <span>📅 ${escapeHtml(v.date || 'TBD')} &bull; Capacity: ${v.capacity || v.attendeeCount || 25}</span>
             <span>🏛️ ${escapeHtml(v.organisedBy || 'IEEE Student Branch')}</span>
             ${dbTag}
             ${confParts > 0 ? `<span style="color: var(--text-secondary); font-size: 0.75rem;">RSVPs: <strong>${confParts}</strong> Confirmed</span>` : ''}
@@ -1912,7 +2074,9 @@ chathumina@ieee.org`;
       state.activeVisit.status = 'Completed';
     }
 
+    syncVisitsFromMembers();
     saveState();
+    populateCompanyFilterDropdown();
     renderMasterRoster();
     renderVisitsHistory();
     renderModalRosterTable();
@@ -2008,7 +2172,26 @@ chathumina@ieee.org`;
   // Export All Members
   document.getElementById('btn-export-all-members')?.addEventListener('click', () => {
     showToast('Exporting Master Database to Excel...');
-    const companies = ['Atlas Labs', 'WSO2', 'Codegen', 'Orange', 'Rootcode', 'IFS', 'Zone24x7', 'Cambio'];
+    
+    // Dynamically collect all visited companies in order of state.visits, then any others
+    const companySet = new Set();
+    const companies = [];
+    state.visits.forEach(v => {
+      if (v.company && !companySet.has(v.company)) {
+        companySet.add(v.company);
+        companies.push(v.company);
+      }
+    });
+    state.members.forEach(m => {
+      if (Array.isArray(m.visitsAttended)) {
+        m.visitsAttended.forEach(c => {
+          if (c && !companySet.has(c)) {
+            companySet.add(c);
+            companies.push(c);
+          }
+        });
+      }
+    });
 
     const exportData = state.members.map((m, idx) => {
       const row = {
@@ -2151,6 +2334,8 @@ chathumina@ieee.org`;
   // Bootstrap
   document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
+    syncVisitsFromMembers();
+    populateCompanyFilterDropdown();
     updateKPIs();
     renderMasterRoster();
 

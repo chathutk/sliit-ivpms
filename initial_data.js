@@ -3566,6 +3566,188 @@ window.IVPMS_INITIAL_DATA = {
       "totalVisits": 1,
       "blacklisted": false,
       "blacklistReason": ""
+    },
+    {
+      "id": "MEM-251",
+      "name": "Chalani Rashmika Jayawickrama",
+      "nic": "200170903253",
+      "ieeeNumber": "I am a volunteer for graduation days at sliit",
+      "phone": "0775669478",
+      "email": "rchalani50@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-252",
+      "name": "Roneth Asvin Galappaththi",
+      "nic": "200420800409",
+      "ieeeNumber": "Battle Arena",
+      "phone": "0764215348",
+      "email": "asvinroneth@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-253",
+      "name": "RAJAPAKSE RGRN",
+      "nic": "200401500469",
+      "ieeeNumber": "IEEE Day",
+      "phone": "0767801400",
+      "email": "rakindu.nenitha@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-254",
+      "name": "Haris Ali Isthihar Ali",
+      "nic": "200405110581",
+      "ieeeNumber": "Battle Arena",
+      "phone": "0758426130",
+      "email": "isthimien@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-255",
+      "name": "Harshitha Yasiru",
+      "nic": "200524303750",
+      "ieeeNumber": "Odyssey, cast 360",
+      "phone": "0770371157",
+      "email": "harshithayasiru34@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-256",
+      "name": "Vihara Yasassrini Pathirana",
+      "nic": "200454810460",
+      "ieeeNumber": "Secretary Team member - BioforgeX 26",
+      "phone": "0766020082",
+      "email": "hs26510421@my.sliit.lk",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-257",
+      "name": "Athiga Paunanthie",
+      "nic": "200550600032",
+      "ieeeNumber": "Yes",
+      "phone": "0772866239",
+      "email": "athigapaunanthie@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-258",
+      "name": "H. N. Manith Dulnim",
+      "nic": "200315913512",
+      "ieeeNumber": "No",
+      "phone": "0712298959",
+      "email": "hn.manithdulnimacc.1@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-259",
+      "name": "Tharushi Wijesiriwardhana",
+      "nic": "200466703854",
+      "ieeeNumber": "No",
+      "phone": "+94 743700501",
+      "email": "en26300162@my.sliit.lk",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-260",
+      "name": "Rathnapala p.d.b",
+      "nic": "200118703605",
+      "ieeeNumber": "No",
+      "phone": "0714181172",
+      "email": "en23772472@my.sliit.lk",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-261",
+      "name": "Haazim Fazal",
+      "nic": "200513000950",
+      "ieeeNumber": "No",
+      "phone": "0764400982",
+      "email": "haazimfazal7@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-262",
+      "name": "Ishodya Nimnadi Punchihewa",
+      "nic": "200564004096",
+      "ieeeNumber": "No",
+      "phone": "0769972699",
+      "email": "it25101416@my.sliit.lk",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
+    },
+    {
+      "id": "MEM-263",
+      "name": "Senavirathna D.K.G.V.R.",
+      "nic": "200429904370",
+      "ieeeNumber": "No",
+      "phone": "0763846657",
+      "email": "vishwa18556@gmail.com",
+      "visitsAttended": [
+        "Lion Brewery"
+      ],
+      "totalVisits": 1,
+      "blacklisted": false,
+      "blacklistReason": ""
     }
   ],
   "visits": [
@@ -3640,6 +3822,15 @@ window.IVPMS_INITIAL_DATA = {
       "organisedBy": "The Loop & IEEE",
       "status": "Completed",
       "attendeeCount": 27
+    },
+    {
+      "id": "VIS-009",
+      "company": "Lion Brewery",
+      "date": "2026-10-15",
+      "capacity": 13,
+      "organisedBy": "IEEE Student Branch",
+      "status": "Completed",
+      "attendeeCount": 13
     }
   ],
   "sampleApplicants": [
